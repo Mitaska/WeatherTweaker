@@ -184,13 +184,14 @@
           while (hook) {
             var ms = hook.memoizedState;
             if (ms !== null && typeof ms === 'object') {
-              if ('current' in ms && Array.isArray(ms.current)) {
-                particlesRefObj = ms;
+              var val = Array.isArray(ms) ? ms[0] : ms;
+              if ('current' in val && Array.isArray(val.current)) {
+                particlesRefObj = val;
                 found = true;
               }
-              if (!('current' in ms) && typeof ms.type === 'string' &&
-                  'count' in ms && 'overlay' in ms && 'lightning' in ms) {
-                configMemoObj = ms;
+              if (!('current' in val) && typeof val.type === 'string' &&
+                  'count' in val && 'overlay' in val && 'lightning' in val) {
+                configMemoObj = val;
               }
             }
             hook = hook.next;
@@ -230,6 +231,9 @@
   var savedLightning = null;
   var savedParticles = null;
   var currentChatId = null;
+  var lightningAlpha = 0;
+  var nextLightningFrame = 0;
+  var lightningFrameCount = 0;
 
   function applyConfigOverrides() {
     if (!configMemoObj) return;
@@ -356,6 +360,7 @@
         modifyParticles(particlesRefObj.current);
       }
     }
+    applyLightningFlash();
     modLoopId = requestAnimationFrame(modLoop);
   }
 
@@ -393,6 +398,33 @@
     tintOverlay = null;
   }
 
+  function applyLightningFlash() {
+    if (!canvas || !configMemoObj) return;
+    var w = WEATHERS[cfg.forcedWeather];
+    if (!w || !w.type || !w.lightning) {
+      nextLightningFrame = 0;
+      lightningAlpha = 0;
+      return;
+    }
+    lightningFrameCount++;
+    if (lightningAlpha > 0) {
+      var ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      var dpr = window.devicePixelRatio || 1;
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = 'rgba(220,230,255,' + lightningAlpha + ')';
+      ctx.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+      ctx.restore();
+      lightningAlpha *= 0.88;
+      if (lightningAlpha < 0.01) lightningAlpha = 0;
+    }
+    if (lightningAlpha <= 0 && lightningFrameCount >= nextLightningFrame) {
+      lightningAlpha = 0.45 + Math.random() * 0.15;
+      nextLightningFrame = lightningFrameCount + 400 + Math.random() * 800;
+    }
+  }
+
   // ============================================================
   // CANVAS DETECTION
   // ============================================================
@@ -419,6 +451,7 @@
     particlesRefObj = null; configMemoObj = null;
     savedOverlay = null; savedLightning = null; savedParticles = null;
     canvas = null; baseCount = 0; fiberRetryCount = 0; currentChatId = null;
+    lightningAlpha = 0; nextLightningFrame = 0; lightningFrameCount = 0;
   }
 
   function scanCanvas() {
