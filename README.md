@@ -8,7 +8,7 @@ A Marinara Engine extension that adds a popup in the chat toolbar to **tweak wea
 - **7 sliders** for opacity, speed, size, count, brightness, contrast, tint
 - **16 weather presets** — force any weather type (rain, snow, thunderstorm, aurora, etc.)
 - **Real-time** — changes take effect immediately via React fiber particle injection
-- **Persistence** — settings saved to localStorage across sessions
+- **Per-chat persistence** — each RP chat stores its own settings (opacity, speed, presets, tint) in localStorage, restored when you switch back
 - **Clean integration** — uses the same popup style as Summary, Author's Notes, Active World Info
 
 ## Installation
@@ -40,15 +40,17 @@ Auto, Clear, Cloudy, Rain, Heavy Rain, Thunderstorm, Snow, Blizzard, Fog, Sandst
 
 ## How it works
 
-WeatherTweaker uses a **React fiber traversal** to access `particlesRef` inside the `WeatherEffects` component. On each animation frame, the extension loop (`requestAnimationFrame`) can:
+**Particle manipulation** — WeatherTweaker traverses the React fiber tree from the weather `<canvas>` to access `particlesRef` inside the `WeatherEffects` component. On each animation frame (`requestAnimationFrame`), the extension loop can:
 
 - Replace particles with preset-generated ones (forced weather)
-- Adjust particle properties (opacity, velocity, size)
+- Adjust particle properties (opacity, velocity, scale)
 - Override particle count
-- Update the canvas CSS filter (brightness/contrast)
-- Inject a tint overlay div
+- Apply CSS filters (brightness, contrast) to the canvas
+- Inject a color tint overlay
 
-The original particles are snapshotted before any forced override, so switching back to "Auto" restores the AI-driven weather seamlessly.
+**Chat detection** — the active chat ID is read from the sidebar's `data-chat-id` attribute on the currently selected conversation entry. Each chat stores its own configuration and original-particle snapshot in `localStorage`, so switching between chats restores their individual settings seamlessly.
+
+The original particles are snapshotted before any forced override, so switching back to "Auto" restores the AI-driven weather for that specific chat.
 
 ## Files
 
@@ -61,6 +63,10 @@ The original particles are snapshotted before any forced override, so switching 
 ## Requirements
 
 - Marinara Engine ≥ v1.5.0 (with extension CSS/JS support)
+- **Dynamic weather effects** enabled: **Settings → Appearance → Dynamic weather effects**
+- **World State** agent active in the chat's Roleplay HUD
+
+If either setting is missing, the popup shows a help message with setup instructions.
 
 ## Uninstall
 

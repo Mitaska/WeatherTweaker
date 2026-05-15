@@ -24,7 +24,56 @@
   }
 
   function saveCfg(cfg) {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg)); } catch (e) {}
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+      if (currentChatId) saveChatState(currentChatId);
+    } catch (e) {}
+  }
+
+  // Per-chat config persistence
+  function chatKey(id) { return 'weathertweaker:chat:' + id; }
+
+  function saveChatState(id) {
+    if (!id) return;
+    try {
+      var state = { cfg: cfg, savedParticles: savedParticles };
+      localStorage.setItem(chatKey(id), JSON.stringify(state));
+    } catch (e) {}
+  }
+
+  function loadChatState(id) {
+    if (!id) return;
+    try {
+      var raw = localStorage.getItem(chatKey(id));
+      if (raw) {
+        var state = JSON.parse(raw);
+        if (state.cfg) Object.assign(cfg, state.cfg);
+        savedParticles = state.savedParticles || null;
+      } else {
+        // No saved state for this chat — reset to defaults
+        Object.assign(cfg, DEFAULTS);
+        savedParticles = null;
+      }
+    } catch (e) {
+      Object.assign(cfg, DEFAULTS);
+      savedParticles = null;
+    }
+  }
+
+  function swapChat(oldId, newId) {
+    if (oldId === newId) return;
+    log('Chat config: ' + oldId + ' -> ' + newId);
+    if (oldId) saveChatState(oldId);
+    currentChatId = newId;
+    // Reset saved overlay/lightning so they're re-captured
+    savedOverlay = null;
+    savedLightning = null;
+    loadChatState(newId);
+    // Apply loaded config to canvas and UI
+    applyCanvasFilters();
+    updateTint();
+    if (popup) updateUI();
+    updateBtnState();
   }
 
   // ============================================================
@@ -163,13 +212,24 @@
     }
   }
 
+  function findActiveChatId() {
+    try {
+      var el = document.querySelector(
+        'aside [data-chat-id].bg-\\[var\\(--sidebar-accent\\)\\]'
+      );
+      return el ? el.getAttribute('data-chat-id') : null;
+    } catch (e) {}
+    return null;
+  }
+
   // ============================================================
   // CONFIG MEMO OVERRIDE
   // ============================================================
 
   var savedOverlay = null;
   var savedLightning = null;
-  var savedParticles = null; // deep copy of original particles before weather force
+  var savedParticles = null;
+  var currentChatId = null;
 
   function applyConfigOverrides() {
     if (!configMemoObj) return;
@@ -277,6 +337,16 @@
 
   function modLoop() {
     if (!particlesRefObj && canvas) locateRefs();
+
+    // Detect chat switch via DOM
+    if (canvas) {
+      var chatId = findActiveChatId();
+      if (chatId && chatId !== currentChatId) {
+        log('Chat switched: ' + (currentChatId ? 'saving' : 'loading') + ' config');
+        swapChat(currentChatId, chatId);
+      }
+    }
+
     if (particlesRefObj && particlesRefObj.current) {
       applyConfigOverrides();
       modifyParticles(particlesRefObj.current);
@@ -344,10 +414,11 @@
 
   function detach() {
     if (modLoopId) { cancelAnimationFrame(modLoopId); modLoopId = null; }
+    if (currentChatId) saveChatState(currentChatId);
     removeTint();
     particlesRefObj = null; configMemoObj = null;
     savedOverlay = null; savedLightning = null; savedParticles = null;
-    canvas = null; baseCount = 0; fiberRetryCount = 0;
+    canvas = null; baseCount = 0; fiberRetryCount = 0; currentChatId = null;
   }
 
   function scanCanvas() {
@@ -523,6 +594,20 @@
   }
 
   function buildContent() {
+    // Check if weather canvas exists — if not, show help message
+    if (!document.querySelector('canvas.pointer-events-none.absolute.inset-0.z-0')) {
+      return (
+        '<div style="padding:12px 0;text-align:center;font-size:12px;color:var(--muted-foreground,#999);line-height:1.6">' +
+        '<div style="font-size:28px;margin-bottom:8px;opacity:.6">\u2601\uFE0F</div>' +
+        'Weather effects not available for this chat.' +
+        '<div style="margin-top:8px;font-size:11px;text-align:left;color:var(--muted-foreground,#999)">' +
+        'Requires:<br>' +
+        '\u2022 <strong>Settings \u2192 Appearance</strong> \u2192 enable <em>Dynamic weather effects</em><br>' +
+        '\u2022 <strong>Roleplay HUD</strong> \u2192 enable the <em>World State</em> agent' +
+        '</div></div>'
+      );
+    }
+
     var rows = '';
     var fields = [
       { id:'mt-opacity',    l:'Opacity',    min:0, max:3, step:0.05 },
