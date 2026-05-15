@@ -2,6 +2,9 @@
 
 A Marinara Engine extension that adds a popup in the chat toolbar to **tweak weather effects** (rain, snow, fog, etc.) in real-time. Adjust opacity, speed, size, particle count, brightness, contrast, and color tint — without polluting the chat screen.
 
+## Demo
+![GIF](assets/demo.gif)
+
 ## Features
 
 - **Toolbar popup** — click the cloud icon in the roleplay chat header
