@@ -13,7 +13,18 @@
     tint: '',
     tintStrength: 0,
     forcedWeather: null,
+    auroraStyle: 'green',
+    auroraColor1: '#80ff80',
+    auroraColor2: '#cc66ff',
+    auroraRevamped: false,
   };
+
+  function hexToRgba(hex, alpha) {
+    var r = parseInt(hex.slice(1, 3), 16);
+    var g = parseInt(hex.slice(3, 5), 16);
+    var b = parseInt(hex.slice(5, 7), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+  }
 
   function loadCfg() {
     try {
@@ -234,6 +245,8 @@
   var lightningAlpha = 0;
   var nextLightningFrame = 0;
   var lightningFrameCount = 0;
+  var auroraBands = null;
+  var auroraFrameCount = 0;
 
   function applyConfigOverrides() {
     if (!configMemoObj) return;
@@ -361,6 +374,7 @@
       }
     }
     applyLightningFlash();
+    drawAurora();
     modLoopId = requestAnimationFrame(modLoop);
   }
 
@@ -425,14 +439,76 @@
     }
   }
 
+  function drawAurora() {
+    if (!canvas || !configMemoObj) return;
+    var w = WEATHERS[cfg.forcedWeather];
+    if (!w || w.type !== 'aurora') {
+      auroraBands = null;
+      auroraFrameCount = 0;
+      return;
+    }
+    if (!cfg.auroraRevamped) return;
+    auroraFrameCount++;
+    var dpr = window.devicePixelRatio || 1;
+    var cw = canvas.width / dpr;
+    var ch = canvas.height / dpr;
+    if (!auroraBands) {
+      auroraBands = [];
+      var count = 5 + Math.floor(Math.random() * 2);
+      for (var i = 0; i < count; i++) {
+        auroraBands.push({
+          x: 0.1 + Math.random() * 0.8,
+          width: 0.06 + Math.random() * 0.08,
+          phase: Math.random() * Math.PI * 2,
+          speed: 0.002 + Math.random() * 0.003,
+          amplitude: 0.06 + Math.random() * 0.06,
+        });
+      }
+    }
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalCompositeOperation = 'screen';
+    var style = cfg.auroraStyle || 'green';
+    for (var i = 0; i < auroraBands.length; i++) {
+      var b = auroraBands[i];
+      var xOff = b.x * cw + Math.sin(auroraFrameCount * b.speed + b.phase) * b.amplitude * cw;
+      var halfW = (b.width * cw) / 2;
+      var grad = ctx.createLinearGradient(xOff - halfW, 0, xOff + halfW, ch);
+      if (style === 'realistic') {
+        grad.addColorStop(0, 'rgba(255,100,180,0)');
+        grad.addColorStop(0.15, 'rgba(255,100,180,0.03)');
+        grad.addColorStop(0.3, 'rgba(150,80,255,0.05)');
+        grad.addColorStop(0.55, 'rgba(0,220,150,0.06)');
+        grad.addColorStop(0.8, 'rgba(80,255,120,0.06)');
+        grad.addColorStop(1, 'rgba(80,255,120,0)');
+      } else if (style === 'custom') {
+        var c1 = cfg.auroraColor1 || '#80ff80';
+        var c2 = cfg.auroraColor2 || '#cc66ff';
+        grad.addColorStop(0, hexToRgba(c2, 0));
+        grad.addColorStop(0.2, hexToRgba(c2, 0.04));
+        grad.addColorStop(0.5, hexToRgba(c1, 0.06));
+        grad.addColorStop(0.75, hexToRgba(c1, 0.08));
+        grad.addColorStop(0.95, hexToRgba(c1, 0.04));
+        grad.addColorStop(1, hexToRgba(c1, 0));
+      } else {
+        grad.addColorStop(0, 'rgba(80,255,120,0)');
+        grad.addColorStop(0.15, 'rgba(0,200,80,0.03)');
+        grad.addColorStop(0.4, 'rgba(0,220,100,0.06)');
+        grad.addColorStop(0.6, 'rgba(80,255,120,0.08)');
+        grad.addColorStop(0.85, 'rgba(80,255,120,0.04)');
+        grad.addColorStop(1, 'rgba(80,255,120,0)');
+      }
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, cw, ch);
+    }
+    ctx.restore();
+  }
+
   // ============================================================
   // CANVAS DETECTION
   // ============================================================
-
-  function isWeatherCanvas(el) {
-    return el.tagName === 'CANVAS' && el.classList.contains('pointer-events-none') &&
-      el.classList.contains('inset-0') && el.classList.contains('z-0');
-  }
 
   function attach(canvasEl) {
     detach();
@@ -452,6 +528,7 @@
     savedOverlay = null; savedLightning = null; savedParticles = null;
     canvas = null; baseCount = 0; fiberRetryCount = 0; currentChatId = null;
     lightningAlpha = 0; nextLightningFrame = 0; lightningFrameCount = 0;
+    auroraBands = null; auroraFrameCount = 0;
   }
 
   function scanCanvas() {
@@ -467,7 +544,7 @@
   function isActive() {
     for (var key in DEFAULTS) {
       if (key === 'tint' || key === 'tintStrength') continue;
-      if (Math.abs(cfg[key] - DEFAULTS[key]) > 0.01) return true;
+      if (cfg[key] !== DEFAULTS[key]) return true;
     }
     if (cfg.forcedWeather) return true;
     if (cfg.tint && cfg.tintStrength > 0) return true;
@@ -684,7 +761,33 @@
         '<input class="mt-rng" id="mt-tint-str" type="range" min="0" max="0.5" step="0.01" value="' + cfg.tintStrength + '">' +
         '<span class="mt-val" id="mt-tint-str-val">' + cfg.tintStrength.toFixed(2) + '</span>' +
       '</div>' +
-      '<button class="mt-rst" id="mt-rst">Reset defaults</button>';
+      '<button class="mt-rst" id="mt-rst">Reset defaults</button>' +
+      '<div id="mt-aurora-section" style="border-top:1px solid var(--border);margin-top:3px">' +
+        '<div style="display:flex;align-items:center;gap:6px;padding:5px 0 2px">' +
+          '<span style="font-size:11px;font-weight:600;color:var(--muted-foreground,#999)">Aurora</span>' +
+        '</div>' +
+        '<div class="mt-row">' +
+          '<span class="mt-lbl">Revamped</span>' +
+          '<input type="checkbox" id="mt-aurora-revamped"' + (cfg.auroraRevamped ? ' checked' : '') + ' style="accent-color:var(--primary,#6c63ff);cursor:pointer">' +
+          '<span title="Render custom aurora bands instead of the default particles" style="cursor:help;font-size:10px;color:var(--muted-foreground,#999);display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid var(--border,#555);flex-shrink:0">?</span>' +
+        '</div>' +
+        '<div class="mt-row">' +
+          '<span class="mt-lbl">Style</span>' +
+          '<select id="mt-aurora-style" class="mt-sel"' + (cfg.auroraRevamped ? '' : ' disabled') + '>' +
+            '<option value="green"' + (cfg.auroraStyle === 'green' ? ' selected' : '') + '>Green</option>' +
+            '<option value="realistic"' + (cfg.auroraStyle === 'realistic' ? ' selected' : '') + '>Realistic</option>' +
+            '<option value="custom"' + (cfg.auroraStyle === 'custom' ? ' selected' : '') + '>Custom</option>' +
+          '</select>' +
+          '<span title="Style presets only apply when Revamped is enabled" style="cursor:help;font-size:10px;color:var(--muted-foreground,#999);display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid var(--border,#555);flex-shrink:0">?</span>' +
+        '</div>' +
+        '<div class="mt-row" id="mt-aurora-custom-row">' +
+          '<input class="mt-clr" id="mt-aurora-c1" type="color" value="' + (cfg.auroraColor1 || '#80ff80') + '"' + (cfg.auroraStyle === 'custom' && cfg.auroraRevamped ? '' : ' disabled') + '>' +
+          '<span style="font-size:10px;color:var(--muted-foreground,#999)">base</span>' +
+          '<input class="mt-clr" id="mt-aurora-c2" type="color" value="' + (cfg.auroraColor2 || '#cc66ff') + '"' + (cfg.auroraStyle === 'custom' && cfg.auroraRevamped ? '' : ' disabled') + '>' +
+          '<span style="font-size:10px;color:var(--muted-foreground,#999)">accent</span>' +
+          '<span title="Custom colors only apply when the Custom style is selected" style="cursor:help;font-size:10px;color:var(--muted-foreground,#999);display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid var(--border,#555);flex-shrink:0">?</span>' +
+        '</div>' +
+      '</div>';
 
     return rows;
   }
@@ -737,11 +840,53 @@
       reset.addEventListener('click', function () {
         Object.assign(cfg, DEFAULTS);
         saveCfg(cfg);
-        savedOverlay = null; savedLightning = null;
         updateUI();
         applyNow();
       });
     }
+
+    var auroraStyle = document.getElementById('mt-aurora-style');
+    if (auroraStyle) {
+      auroraStyle.addEventListener('change', function () {
+        cfg.auroraStyle = auroraStyle.value;
+        saveCfg(cfg);
+        updateAuroraDisabled();
+        applyNow();
+      });
+    }
+    var auroraC1 = document.getElementById('mt-aurora-c1');
+    var auroraC2 = document.getElementById('mt-aurora-c2');
+    function onAuroraColor() {
+      if (auroraC1 && auroraC2) {
+        cfg.auroraColor1 = auroraC1.value;
+        cfg.auroraColor2 = auroraC2.value;
+        saveCfg(cfg);
+        auroraBands = null;
+      }
+    }
+    if (auroraC1) auroraC1.addEventListener('input', onAuroraColor);
+    if (auroraC2) auroraC2.addEventListener('input', onAuroraColor);
+
+    var revamped = document.getElementById('mt-aurora-revamped');
+    if (revamped) {
+      revamped.addEventListener('change', function () {
+        cfg.auroraRevamped = revamped.checked;
+        saveCfg(cfg);
+        auroraBands = null;
+        updateAuroraDisabled();
+        applyNow();
+      });
+    }
+  }
+
+  function updateAuroraDisabled() {
+    var as = document.getElementById('mt-aurora-style');
+    if (as) as.disabled = !cfg.auroraRevamped;
+    var c1 = document.getElementById('mt-aurora-c1');
+    var c2 = document.getElementById('mt-aurora-c2');
+    var cd = !cfg.auroraRevamped || cfg.auroraStyle !== 'custom';
+    if (c1) c1.disabled = cd;
+    if (c2) c2.disabled = cd;
   }
 
   function updateUI() {
@@ -761,6 +906,15 @@
     if (tc) tc.value = cfg.tint || '#ff9933';
     if (ts) ts.value = cfg.tintStrength;
     if (tv) tv.textContent = cfg.tintStrength.toFixed(2);
+    var as = document.getElementById('mt-aurora-style');
+    if (as) as.value = cfg.auroraStyle || 'green';
+    var ac1 = document.getElementById('mt-aurora-c1');
+    var ac2 = document.getElementById('mt-aurora-c2');
+    if (ac1) ac1.value = cfg.auroraColor1 || '#80ff80';
+    if (ac2) ac2.value = cfg.auroraColor2 || '#cc66ff';
+    var rev = document.getElementById('mt-aurora-revamped');
+    if (rev) rev.checked = cfg.auroraRevamped !== false;
+    updateAuroraDisabled();
     updateBtnState();
   }
 

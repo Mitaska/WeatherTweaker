@@ -12,7 +12,9 @@ const css =
   '.mt-rng{flex:1;min-width:0;height:4px;cursor:pointer;accent-color:var(--primary,#6c63ff)}' +
   '.mt-val{flex:0 0 30px;text-align:right;font-size:10px;font-variant-numeric:tabular-nums;color:var(--muted-foreground,#999);overflow:hidden}' +
   '.mt-clr{width:24px;height:20px;padding:0;border:1px solid var(--border,#444);border-radius:3px;cursor:pointer;background:none;flex-shrink:0}' +
+  '.mt-clr:disabled{opacity:.4;cursor:not-allowed}' +
   '.mt-sel{flex:1;height:22px;font-size:11px;border:1px solid var(--border,#444);border-radius:4px;background:var(--card,#222);color:var(--foreground,#e0e0e0);cursor:pointer;padding:0 4px}' +
+  '.mt-sel:disabled{opacity:.4;cursor:not-allowed}' +
   '.mt-sel:focus{outline:none;border-color:var(--primary,#6c63ff)}' +
   '.mt-rst{display:block;width:calc(100% - 24px);margin:4px 12px 6px;padding:4px 0;cursor:pointer;background:var(--primary,#6c63ff);color:#fff;border:none;border-radius:4px;font-size:11px;transition:opacity .15s}' +
   '.mt-rst:hover{opacity:.85}' +
