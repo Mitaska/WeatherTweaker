@@ -13,6 +13,7 @@ A Marinara Engine extension that adds a popup in the chat toolbar to **tweak wea
 - **Real-time** — changes take effect immediately via React fiber particle injection
 - **Per-chat persistence** — each RP chat stores its own settings (opacity, speed, presets, tint) in localStorage, restored when you switch back
 - **Clean integration** — uses the same popup style as Summary, Author's Notes, Active World Info
+- **Revamped Aurora** — toggleable custom band-based aurora rendering with `screen` blend mode, diagonal gradients, and 3 style modes
 
 ## Installation
 
@@ -24,7 +25,7 @@ Open Marinara Engine, go to **Settings → Extensions**, click **Import** and se
 2. Click the cloud icon (**☁️**) in the toolbar at the top of the chat
 3. Adjust the sliders:
 
-| Control | Effect | Range |
+| Control | Effect | Range / Values |
 |---|---|---|
 | **Opacity** | Multiplies particle transparency | 0 – 3 |
 | **Speed** | Multiplies particle velocity | 0 – 3 |
@@ -34,6 +35,9 @@ Open Marinara Engine, go to **Settings → Extensions**, click **Import** and se
 | **Contrast** | CSS contrast filter on canvas | 0 – 3 |
 | **Tint** | Color overlay (mix-blend-mode) | 0 – 0.5 |
 | **Weather** | Force a preset or return to Auto | — |
+| **Aurora Revamped** |	Toggle custom aurora bands | On / Off |
+| **Aurora Style** | Color mode for bands |	Green, Realistic, Custom |
+| **Aurora Colors** |	Base + accent pickers (Custom mode) |	any hex |
 
 The button glows when settings deviate from defaults or a preset is active.
 
@@ -52,6 +56,8 @@ Auto, Clear, Cloudy, Rain, Heavy Rain, Thunderstorm, Snow, Blizzard, Fog, Sandst
 - Inject a color tint overlay
 
 **Chat detection** — the active chat ID is read from the sidebar's `data-chat-id` attribute on the currently selected conversation entry. Each chat stores its own configuration and original-particle snapshot in `localStorage`, so switching between chats restores their individual settings seamlessly.
+
+**Custom aurora & lightning** — when `Revamped` is enabled for the Aurora preset, the extension paints vertical gradient bands (with `globalCompositeOperation: 'screen'`) directly on the canvas after the engine's render loop. Lightning flashes are similarly painted as white-blue overlays (`rgba(220,230,255)`) with the same frequency and decay as the engine's internal lightning. Both run inside the same `requestAnimationFrame` callback (`modLoop`) that handles particle injection.
 
 The original particles are snapshotted before any forced override, so switching back to "Auto" restores the AI-driven weather for that specific chat.
 
