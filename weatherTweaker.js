@@ -107,7 +107,9 @@
     blossom:   { label: '\uD83C\uDF38 Cherry Blossom',    type: 'petal', count: 30, overlay: 'rgba(255,180,200,0.04)', lightning: false },
     ember:     { label: '\uD83D\uDD25 Ember / Fire',     type: 'ember', count: 35, overlay: 'rgba(120,40,10,0.08)',   lightning: false },
     ash:       { label: '\uD83C\uDF0B Ash / Volcanic',    type: 'ash',   count: 40, overlay: 'rgba(80,60,60,0.10)',    lightning: false },
-    aurora:    { label: '\uD83C\uDF0C Aurora',         type: 'aurora',count: 6,  overlay: 'rgba(20,60,40,0.08)',    lightning: false },
+    aurora:    { label: '\uD83C\uDF0C Aurora',             type: 'aurora',count: 6,    overlay: 'rgba(20,60,40,0.08)',    lightning: false },
+    starrynight: { label: '\u2728 Starry Night',           type: 'star',  count: 140, overlay: 'rgba(6,8,22,0.20)',   lightning: false, shootingStars: false, meteorRate: 0 },
+    starryshowers:{ label: '\uD83C\uDF20 Starry Showers',   type: 'star',  count: 60,  overlay: 'rgba(6,8,22,0.20)',   lightning: false, shootingStars: true,  meteorRate: 0.022 },
   };
 
   // ============================================================
@@ -135,7 +137,22 @@
       case 'leaf':    p.vy=rand(0.8,1.8);p.vx=rand(1.5,3.5);p.size=rand(4,7);p.opacity=rand(0.5,0.8);p.maxLife=500;break;
       case 'petal':   p.vy=rand(0.4,1.2);p.vx=rand(0.5,1.5);p.size=rand(3,6);p.opacity=rand(0.4,0.7);p.maxLife=600;break;
       case 'firefly': p.vy=rand(-0.2,0.2);p.vx=rand(-0.3,0.3);p.size=rand(2,4);p.opacity=0;p.maxLife=rand(300,600);break;
-      case 'star':    p.vy=0;p.vx=0;p.size=rand(1,2.5);p.opacity=0;p.maxLife=rand(400,800);p.y=Math.random()*h*0.4;break;
+      case 'star':
+        p.vy = 0; p.vx = 0;
+        p.opacity = 0;
+        p.size = rand(0.42, 1.92);
+        p.starBase = rand(0.35, 0.95);
+        p.twinkleSpeed = rand(0.003, 0.011);
+        p.maxLife = 99999;
+        p.xRatio = Math.random();
+        p.yRatio = Math.random();
+        var hue = Math.random();
+        if (hue < 0.55)      p.colorRgb = '255,255,255';
+        else if (hue < 0.78) p.colorRgb = '210,225,255';
+        else if (hue < 0.92) p.colorRgb = '255,235,200';
+        else                 p.colorRgb = '255,210,210';
+        p.bright = Math.random() < 0.07;
+        break;
       case 'fog':     p.vy=0;p.vx=rand(0.2,0.6);p.size=rand(60,140);p.opacity=rand(0.03,0.07);p.maxLife=1000;break;
       case 'dust':    p.vy=rand(-0.1,0.1);p.vx=rand(-0.1,0.1);p.size=rand(1,3);p.opacity=rand(0.15,0.3);p.maxLife=rand(600,1000);break;
       case 'ember':   p.vy=rand(-1.5,-3);p.vx=rand(-0.5,0.5);p.size=rand(2,4);p.opacity=rand(0.6,0.9);p.maxLife=rand(300,500);p.y=h-Math.random()*h*0.2;break;
@@ -247,6 +264,8 @@
   var lightningFrameCount = 0;
   var auroraBands = null;
   var auroraFrameCount = 0;
+  var shootingStars = [];
+  var starFrameCount = 0;
 
   function applyConfigOverrides() {
     if (!configMemoObj) return;
@@ -375,6 +394,8 @@
     }
     applyLightningFlash();
     drawAurora();
+    drawStars();
+    drawShootingStars();
     modLoopId = requestAnimationFrame(modLoop);
   }
 
@@ -506,6 +527,158 @@
     ctx.restore();
   }
 
+  function drawStars() {
+    if (!canvas || !configMemoObj) return;
+    var w = WEATHERS[cfg.forcedWeather];
+    if (!w || w.type !== 'star') { starFrameCount = 0; return; }
+    if (!particlesRefObj || !particlesRefObj.current) return;
+    var particles = particlesRefObj.current;
+    var dpr = window.devicePixelRatio || 1;
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    starFrameCount++;
+    var cw = canvas.width / dpr;
+    var ch = canvas.height / dpr;
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalCompositeOperation = 'screen';
+    var speedMul = cfg.speed || 1;
+    for (var i = 0; i < particles.length; i++) {
+      var p = particles[i];
+      if (p.type !== 'star') continue;
+      if (p.xRatio !== undefined) {
+        p.x = p.xRatio * cw;
+        p.y = p.yRatio * ch;
+      }
+      var floor = p.bright ? 0.55 : 0.30;
+      var twinkle = floor + (1 - floor) * (0.5 + 0.5 * Math.sin(p.wobble + starFrameCount * (p.twinkleSpeed || 0.006) * speedMul));
+      var base = (p.starBase || 0.6) * (cfg.opacity || 1);
+      var alpha = Math.max(0, Math.min(1, base * twinkle));
+      if (alpha <= 0.01) continue;
+      var size = Math.max(0.3, p.size);
+      var rgb = p.colorRgb || '255,255,255';
+      // soft halo
+      var haloR = size * (p.bright ? 6 : 3.2);
+      var glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, haloR);
+      glow.addColorStop(0, 'rgba(' + rgb + ',' + (alpha * (p.bright ? 0.55 : 0.32)) + ')');
+      glow.addColorStop(0.4, 'rgba(' + rgb + ',' + (alpha * 0.12) + ')');
+      glow.addColorStop(1, 'rgba(' + rgb + ',0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, haloR, 0, Math.PI * 2);
+      ctx.fill();
+      // core
+      ctx.fillStyle = 'rgba(' + rgb + ',' + alpha + ')';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, size * 0.75, 0, Math.PI * 2);
+      ctx.fill();
+      // diffraction spikes for bright stars
+      if (p.bright) {
+        var spikeLen = size * 5;
+        var spikeAlpha = alpha * 0.6;
+        var grad = ctx.createLinearGradient(p.x - spikeLen, p.y, p.x + spikeLen, p.y);
+        grad.addColorStop(0, 'rgba(' + rgb + ',0)');
+        grad.addColorStop(0.5, 'rgba(' + rgb + ',' + spikeAlpha + ')');
+        grad.addColorStop(1, 'rgba(' + rgb + ',0)');
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(p.x - spikeLen, p.y);
+        ctx.lineTo(p.x + spikeLen, p.y);
+        ctx.stroke();
+        var grad2 = ctx.createLinearGradient(p.x, p.y - spikeLen, p.x, p.y + spikeLen);
+        grad2.addColorStop(0, 'rgba(' + rgb + ',0)');
+        grad2.addColorStop(0.5, 'rgba(' + rgb + ',' + spikeAlpha + ')');
+        grad2.addColorStop(1, 'rgba(' + rgb + ',0)');
+        ctx.strokeStyle = grad2;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y - spikeLen);
+        ctx.lineTo(p.x, p.y + spikeLen);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawShootingStars() {
+    if (!canvas || !configMemoObj) return;
+    var w = WEATHERS[cfg.forcedWeather];
+    if (!w || !w.shootingStars) {
+      shootingStars = [];
+      return;
+    }
+    var dpr = window.devicePixelRatio || 1;
+    var cw = canvas.width / dpr;
+    var ch = canvas.height / dpr;
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    var speedMul = cfg.speed || 1;
+    var MAX_CONCURRENT = 2;
+    var rate = (w.meteorRate || 0.022) * Math.max(0.2, Math.min(speedMul, 3));
+    if (shootingStars.length < MAX_CONCURRENT && Math.random() < rate) {
+      var sx = Math.random() * cw;
+      var sy = -8;
+      // Mostly straight down, slight diagonal (~±10°)
+      var angle = Math.PI / 2 + (Math.random() - 0.5) * 0.35;
+      var speed = (2.6 + Math.random() * 2.2) * speedMul;
+      shootingStars.push({
+        x: sx, y: sy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        startAlpha: 0.85 + Math.random() * 0.15,
+        age: 0,
+        maxAge: 100 + Math.floor(Math.random() * 80),
+        length: 45 + Math.random() * 55,
+        tint: Math.random() < 0.2 ? '255,210,160' : '230,240,255',
+      });
+    }
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalCompositeOperation = 'screen';
+    for (var i = shootingStars.length - 1; i >= 0; i--) {
+      var s = shootingStars[i];
+      s.age++;
+      var fadeIn = Math.min(1, s.age / 4);
+      var fadeOut = Math.max(0, 1 - s.age / s.maxAge);
+      s.alpha = s.startAlpha * fadeIn * fadeOut;
+      if (s.age >= s.maxAge || (s.alpha <= 0.01 && s.age > 4)) {
+        shootingStars.splice(i, 1);
+        continue;
+      }
+      s.x += s.vx;
+      s.y += s.vy;
+      if (s.x < -50 || s.y > ch + 50) { shootingStars.splice(i, 1); continue; }
+      var dir = Math.atan2(s.vy, s.vx);
+      var tailX = s.x - Math.cos(dir) * s.length;
+      var tailY = s.y - Math.sin(dir) * s.length;
+      var rgb = s.tint;
+      // Long tapered trail
+      var grad = ctx.createLinearGradient(s.x, s.y, tailX, tailY);
+      grad.addColorStop(0, 'rgba(255,255,255,' + s.alpha + ')');
+      grad.addColorStop(0.12, 'rgba(' + rgb + ',' + (s.alpha * 0.75) + ')');
+      grad.addColorStop(0.55, 'rgba(' + rgb + ',' + (s.alpha * 0.25) + ')');
+      grad.addColorStop(1, 'rgba(' + rgb + ',0)');
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 1.8;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y);
+      ctx.lineTo(tailX, tailY);
+      ctx.stroke();
+      // Bright head glow
+      var headR = 7;
+      var headGlow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, headR);
+      headGlow.addColorStop(0, 'rgba(255,255,255,' + s.alpha + ')');
+      headGlow.addColorStop(0.35, 'rgba(' + rgb + ',' + (s.alpha * 0.55) + ')');
+      headGlow.addColorStop(1, 'rgba(' + rgb + ',0)');
+      ctx.fillStyle = headGlow;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, headR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   // ============================================================
   // CANVAS DETECTION
   // ============================================================
@@ -528,7 +701,7 @@
     savedOverlay = null; savedLightning = null; savedParticles = null;
     canvas = null; baseCount = 0; fiberRetryCount = 0; currentChatId = null;
     lightningAlpha = 0; nextLightningFrame = 0; lightningFrameCount = 0;
-    auroraBands = null; auroraFrameCount = 0;
+    auroraBands = null; auroraFrameCount = 0; shootingStars = []; starFrameCount = 0;
   }
 
   function scanCanvas() {
