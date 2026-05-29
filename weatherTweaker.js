@@ -137,22 +137,10 @@
       case 'leaf':    p.vy=rand(0.8,1.8);p.vx=rand(1.5,3.5);p.size=rand(4,7);p.opacity=rand(0.5,0.8);p.maxLife=500;break;
       case 'petal':   p.vy=rand(0.4,1.2);p.vx=rand(0.5,1.5);p.size=rand(3,6);p.opacity=rand(0.4,0.7);p.maxLife=600;break;
       case 'firefly': p.vy=rand(-0.2,0.2);p.vx=rand(-0.3,0.3);p.size=rand(2,4);p.opacity=0;p.maxLife=rand(300,600);break;
-      case 'star':
-        p.vy = 0; p.vx = 0;
-        p.opacity = 0;
-        p.size = rand(0.42, 1.92);
-        p.starBase = rand(0.35, 0.95);
-        p.twinkleSpeed = rand(0.003, 0.011);
-        p.maxLife = 99999;
-        p.xRatio = Math.random();
-        p.yRatio = Math.random();
-        var hue = Math.random();
-        if (hue < 0.55)      p.colorRgb = '255,255,255';
-        else if (hue < 0.78) p.colorRgb = '210,225,255';
-        else if (hue < 0.92) p.colorRgb = '255,235,200';
-        else                 p.colorRgb = '255,210,210';
-        p.bright = Math.random() < 0.07;
-        break;
+      // NOTE: 'star' presets do NOT use this factory. Stars live in their own
+      // extension-owned field (see buildStarField/drawStars) and are kept out of
+      // the host's particle array entirely; see modifyParticles().
+      case 'star':    p.vy=0;p.vx=0;p.opacity=0;p.size=1;p.maxLife=99999;break;
       case 'fog':     p.vy=0;p.vx=rand(0.2,0.6);p.size=rand(60,140);p.opacity=rand(0.03,0.07);p.maxLife=1000;break;
       case 'dust':    p.vy=rand(-0.1,0.1);p.vx=rand(-0.1,0.1);p.size=rand(1,3);p.opacity=rand(0.15,0.3);p.maxLife=rand(600,1000);break;
       case 'ember':   p.vy=rand(-1.5,-3);p.vx=rand(-0.5,0.5);p.size=rand(2,4);p.opacity=rand(0.6,0.9);p.maxLife=rand(300,500);p.y=h-Math.random()*h*0.2;break;
@@ -266,6 +254,7 @@
   var auroraFrameCount = 0;
   var shootingStars = [];
   var starFrameCount = 0;
+  var starField = null;
 
   function applyConfigOverrides() {
     if (!configMemoObj) return;
@@ -312,6 +301,16 @@
       // Before first force, snapshot the original particles
       if (!savedParticles && particles && particles.length > 0) {
         savedParticles = cloneParticleArray(particles);
+      }
+      if (w.type === 'star') {
+        // Stars (and meteors) are rendered by drawStars()/drawShootingStars()
+        // from arrays the extension owns directly. We deliberately keep the
+        // host's particle array EMPTY for star presets: anything left in it is
+        // subject to the host's own rAF loop, which respawns off-screen/expired
+        // particles via its top-40%-biased star factory on every canvas resize
+        // (frequent on mobile). Owning the field ourselves keeps it uniform.
+        if (particles && particles.length) particles.length = 0;
+        return;
       }
       var wDim = canvas ? { w: canvas.width, h: canvas.height } : { w: 1920, h: 1080 };
       var desiredCount = Math.round((w.count || 50) * cfg.count);
@@ -527,73 +526,97 @@
     ctx.restore();
   }
 
+  function buildStarField(count) {
+    var arr = [];
+    for (var i = 0; i < count; i++) {
+      var hue = Math.random();
+      arr.push({
+        xRatio: Math.random(),
+        yRatio: Math.random(),
+        size: rand(0.42, 1.92),
+        base: rand(0.35, 0.95),
+        tw: rand(0.003, 0.011),
+        phase: Math.random() * Math.PI * 2,
+        bright: Math.random() < 0.07,
+        rgb: hue < 0.55 ? '255,255,255'
+           : hue < 0.78 ? '210,225,255'
+           : hue < 0.92 ? '255,235,200'
+           : '255,210,210',
+      });
+    }
+    return arr;
+  }
+
   function drawStars() {
     if (!canvas || !configMemoObj) return;
     var w = WEATHERS[cfg.forcedWeather];
-    if (!w || w.type !== 'star') { starFrameCount = 0; return; }
-    if (!particlesRefObj || !particlesRefObj.current) return;
-    var particles = particlesRefObj.current;
-    var dpr = window.devicePixelRatio || 1;
+    if (!w || w.type !== 'star') { starField = null; starFrameCount = 0; return; }
     var ctx = canvas.getContext('2d');
     if (!ctx) return;
-    starFrameCount++;
+    var dpr = window.devicePixelRatio || 1;
     var cw = canvas.width / dpr;
     var ch = canvas.height / dpr;
+    // Positions are stored as ratios in a field the extension owns, then scaled
+    // to the live canvas size each frame — so the layout is uniform and follows
+    // any window/canvas resize without ever being touched by the host loop.
+    var desired = Math.max(1, Math.min(Math.round((w.count || 120) * cfg.count), 5000));
+    if (!starField || Math.abs(starField.length - desired) > Math.max(desired * 0.1, 5)) {
+      starField = buildStarField(desired);
+    }
+    starFrameCount++;
+    var sizeMul = cfg.size || 1;
+    var opacityMul = cfg.opacity || 1;
+    var speedMul = cfg.speed || 1;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.globalCompositeOperation = 'screen';
-    var speedMul = cfg.speed || 1;
-    for (var i = 0; i < particles.length; i++) {
-      var p = particles[i];
-      if (p.type !== 'star') continue;
-      if (p.xRatio !== undefined) {
-        p.x = p.xRatio * cw;
-        p.y = p.yRatio * ch;
-      }
-      var floor = p.bright ? 0.55 : 0.30;
-      var twinkle = floor + (1 - floor) * (0.5 + 0.5 * Math.sin(p.wobble + starFrameCount * (p.twinkleSpeed || 0.006) * speedMul));
-      var base = (p.starBase || 0.6) * (cfg.opacity || 1);
-      var alpha = Math.max(0, Math.min(1, base * twinkle));
+    for (var i = 0; i < starField.length; i++) {
+      var s = starField[i];
+      var x = s.xRatio * cw;
+      var y = s.yRatio * ch;
+      var floor = s.bright ? 0.55 : 0.30;
+      var twinkle = floor + (1 - floor) * (0.5 + 0.5 * Math.sin(s.phase + starFrameCount * s.tw * speedMul));
+      var alpha = Math.max(0, Math.min(1, s.base * opacityMul * twinkle));
       if (alpha <= 0.01) continue;
-      var size = Math.max(0.3, p.size);
-      var rgb = p.colorRgb || '255,255,255';
+      var size = Math.max(0.3, s.size * sizeMul);
+      var rgb = s.rgb;
       // soft halo
-      var haloR = size * (p.bright ? 6 : 3.2);
-      var glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, haloR);
-      glow.addColorStop(0, 'rgba(' + rgb + ',' + (alpha * (p.bright ? 0.55 : 0.32)) + ')');
+      var haloR = size * (s.bright ? 6 : 3.2);
+      var glow = ctx.createRadialGradient(x, y, 0, x, y, haloR);
+      glow.addColorStop(0, 'rgba(' + rgb + ',' + (alpha * (s.bright ? 0.55 : 0.32)) + ')');
       glow.addColorStop(0.4, 'rgba(' + rgb + ',' + (alpha * 0.12) + ')');
       glow.addColorStop(1, 'rgba(' + rgb + ',0)');
       ctx.fillStyle = glow;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, haloR, 0, Math.PI * 2);
+      ctx.arc(x, y, haloR, 0, Math.PI * 2);
       ctx.fill();
       // core
       ctx.fillStyle = 'rgba(' + rgb + ',' + alpha + ')';
       ctx.beginPath();
-      ctx.arc(p.x, p.y, size * 0.75, 0, Math.PI * 2);
+      ctx.arc(x, y, size * 0.75, 0, Math.PI * 2);
       ctx.fill();
       // diffraction spikes for bright stars
-      if (p.bright) {
+      if (s.bright) {
         var spikeLen = size * 5;
         var spikeAlpha = alpha * 0.6;
-        var grad = ctx.createLinearGradient(p.x - spikeLen, p.y, p.x + spikeLen, p.y);
+        var grad = ctx.createLinearGradient(x - spikeLen, y, x + spikeLen, y);
         grad.addColorStop(0, 'rgba(' + rgb + ',0)');
         grad.addColorStop(0.5, 'rgba(' + rgb + ',' + spikeAlpha + ')');
         grad.addColorStop(1, 'rgba(' + rgb + ',0)');
         ctx.strokeStyle = grad;
         ctx.lineWidth = 0.6;
         ctx.beginPath();
-        ctx.moveTo(p.x - spikeLen, p.y);
-        ctx.lineTo(p.x + spikeLen, p.y);
+        ctx.moveTo(x - spikeLen, y);
+        ctx.lineTo(x + spikeLen, y);
         ctx.stroke();
-        var grad2 = ctx.createLinearGradient(p.x, p.y - spikeLen, p.x, p.y + spikeLen);
+        var grad2 = ctx.createLinearGradient(x, y - spikeLen, x, y + spikeLen);
         grad2.addColorStop(0, 'rgba(' + rgb + ',0)');
         grad2.addColorStop(0.5, 'rgba(' + rgb + ',' + spikeAlpha + ')');
         grad2.addColorStop(1, 'rgba(' + rgb + ',0)');
         ctx.strokeStyle = grad2;
         ctx.beginPath();
-        ctx.moveTo(p.x, p.y - spikeLen);
-        ctx.lineTo(p.x, p.y + spikeLen);
+        ctx.moveTo(x, y - spikeLen);
+        ctx.lineTo(x, y + spikeLen);
         ctx.stroke();
       }
     }
@@ -701,7 +724,7 @@
     savedOverlay = null; savedLightning = null; savedParticles = null;
     canvas = null; baseCount = 0; fiberRetryCount = 0; currentChatId = null;
     lightningAlpha = 0; nextLightningFrame = 0; lightningFrameCount = 0;
-    auroraBands = null; auroraFrameCount = 0; shootingStars = []; starFrameCount = 0;
+    auroraBands = null; auroraFrameCount = 0; shootingStars = []; starFrameCount = 0; starField = null;
   }
 
   function scanCanvas() {
@@ -724,8 +747,48 @@
     return false;
   }
 
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+
+  function weatherBtnClass(active) {
+    var base = 'flex items-center justify-center rounded-full border backdrop-blur-md transition-all p-1.5 ';
+    return active
+      ? base + 'bg-foreground/15 border-foreground/20 text-foreground/90'
+      : base + 'border-foreground/10 bg-foreground/5 text-foreground/60 hover:bg-foreground/10 hover:text-foreground';
+  }
+
+  function buildWeatherIcon() {
+    var svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('width', '14'); svg.setAttribute('height', '14');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2'); svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('stroke-linejoin', 'round');
+    var p1 = document.createElementNS(SVG_NS, 'path'); p1.setAttribute('d', 'M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z'); svg.appendChild(p1);
+    var p2 = document.createElementNS(SVG_NS, 'path'); p2.setAttribute('d', 'M12 2v1M4.93 4.93l.7.7M2 12h1M20 12h1M6 17l-1 1'); svg.appendChild(p2);
+    return svg;
+  }
+
+  function makeWeatherButton() {
+    var btn = document.createElement('button');
+    btn.className = weatherBtnClass(isActive() || popup !== null);
+    btn.title = 'WeatherTweaker \u2014 Weather Tweaks';
+    btn.appendChild(buildWeatherIcon());
+    return btn;
+  }
+
+  function onWeatherBtnClick(e) {
+    // On the mobile "..." popover the popup opens as a full-screen modal on
+    // <body>, so we let the click bubble and the engine's menu close itself.
+    // Everywhere else (desktop inline, or desktop "compact" popover where the
+    // popup is anchored inside the menu) we must stop propagation, otherwise the
+    // menu would close and tear down the popup with it.
+    var fromMobilePopover = this.hasAttribute('data-mt-popover') && window.innerWidth < 768;
+    if (!fromMobilePopover) e.stopPropagation();
+    if (popup && popup.parentNode) closePopup();
+    else showPopup(this);
+  }
+
   function addToolbarButtons() {
-    // Find all toolbar groups (desktop + mobile variants)
+    // Desktop / inline toolbar group
     var groups = document.querySelectorAll('div.pointer-events-auto.ml-auto.flex.shrink-0');
     for (var i = 0; i < groups.length; i++) {
       var group = groups[i];
@@ -737,32 +800,42 @@
       wrapper.id = 'mt-btn-wrapper';
       wrapper.className = 'relative';
 
-      var btn = document.createElement('button');
-      btn.className =
-        'flex items-center justify-center rounded-full border backdrop-blur-md transition-all p-1.5 ' +
-        'border-foreground/10 bg-foreground/5 text-foreground/60 hover:bg-foreground/10 hover:text-foreground';
-      btn.title = 'WeatherTweaker \u2014 Weather Tweaks';
-      var svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
-      svg.setAttribute('width','14');svg.setAttribute('height','14');
-      svg.setAttribute('viewBox','0 0 24 24');
-      svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');
-      svg.setAttribute('stroke-width','2');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');
-      var p1=document.createElementNS('http://www.w3.org/2000/svg','path');p1.setAttribute('d','M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z');svg.appendChild(p1);
-      var p2=document.createElementNS('http://www.w3.org/2000/svg','path');p2.setAttribute('d','M12 2v1M4.93 4.93l.7.7M2 12h1M20 12h1M6 17l-1 1');svg.appendChild(p2);
-      btn.appendChild(svg);
-
+      var btn = makeWeatherButton();
       wrapper.appendChild(btn);
       group.insertBefore(wrapper, group.firstChild);
 
-      // Click handler
-      btn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        if (popup && popup.parentNode) {
-          closePopup();
-        } else {
-          showPopup(this);
-        }
-      });
+      btn.addEventListener('click', onWeatherBtnClick);
+    }
+
+    injectMobileMenuButton();
+  }
+
+  // On mobile (and desktop "compact" mode) the engine collapses the toolbar
+  // buttons into a "..." overflow menu \u2014 a portal popover appended to <body>
+  // with the classes below. The extension button isn't a React child of that
+  // menu, so we inject a copy whenever the popover appears.
+  function injectMobileMenuButton() {
+    // The plain conversation view has an identical-looking overflow menu but no
+    // weather effects. Our desktop button (#mt-btn-wrapper) is only ever injected
+    // on the roleplay surface \u2014 and stays in the DOM, just CSS-hidden, on mobile \u2014
+    // so its presence is a reliable "this chat is a roleplay" gate.
+    if (!document.getElementById('mt-btn-wrapper')) return;
+    var popovers = document.querySelectorAll('div.fixed.w-9.flex-col.items-center');
+    for (var i = 0; i < popovers.length; i++) {
+      var pop = popovers[i];
+      if (pop.querySelector('#mt-popover-btn')) continue; // already injected
+      if (!pop.querySelector('button')) continue;          // not a toolbar menu
+
+      var wrapper = document.createElement('div');
+      wrapper.className = 'relative';
+
+      var btn = makeWeatherButton();
+      btn.id = 'mt-popover-btn';
+      btn.setAttribute('data-mt-popover', '1');
+      wrapper.appendChild(btn);
+      pop.appendChild(wrapper);
+
+      btn.addEventListener('click', onWeatherBtnClick);
     }
   }
 
@@ -1092,19 +1165,10 @@
   }
 
   function updateBtnState() {
-    var btns = document.querySelectorAll('#mt-btn-wrapper > button');
+    var btns = document.querySelectorAll('#mt-btn-wrapper > button, #mt-popover-btn');
     var active = isActive() || (popup !== null);
     for (var i = 0; i < btns.length; i++) {
-      var b = btns[i];
-      if (active) {
-        b.className =
-          'flex items-center justify-center rounded-full border backdrop-blur-md transition-all p-1.5 ' +
-          'bg-foreground/15 border-foreground/20 text-foreground/90';
-      } else {
-        b.className =
-          'flex items-center justify-center rounded-full border backdrop-blur-md transition-all p-1.5 ' +
-          'border-foreground/10 bg-foreground/5 text-foreground/60 hover:bg-foreground/10 hover:text-foreground';
-      }
+      btns[i].className = weatherBtnClass(active);
     }
   }
 
@@ -1153,7 +1217,7 @@
       if (canvasObserver) canvasObserver.disconnect();
       if (toolbarObserver) toolbarObserver.disconnect();
       clearInterval(toolbarInterval);
-      var wrappers = document.querySelectorAll('#mt-btn-wrapper');
+      var wrappers = document.querySelectorAll('#mt-btn-wrapper, #mt-popover-btn');
       for (var i = 0; i < wrappers.length; i++) {
         if (wrappers[i].parentNode) wrappers[i].parentNode.removeChild(wrappers[i]);
       }
