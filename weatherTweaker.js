@@ -17,6 +17,8 @@
     auroraColor1: '#80ff80',
     auroraColor2: '#cc66ff',
     auroraRevamped: false,
+    celestial: 'auto',
+    sunRays: true,
   };
 
   function hexToRgba(hex, alpha) {
@@ -247,6 +249,7 @@
   var savedLightning = null;
   var savedParticles = null;
   var currentChatId = null;
+  var savedCelestial = null;
   var lightningAlpha = 0;
   var nextLightningFrame = 0;
   var lightningFrameCount = 0;
@@ -263,11 +266,19 @@
       if (savedOverlay === null) savedOverlay = configMemoObj.overlay;
       if (savedLightning === null) savedLightning = configMemoObj.lightning;
       configMemoObj.overlay = w.overlay;
-      configMemoObj.lightning = w.lightning;
+      configMemoObj.lightning = false; // extension handles lightning
     } else {
       if (savedOverlay !== null) { configMemoObj.overlay = savedOverlay; savedOverlay = null; }
       if (savedLightning !== null) { configMemoObj.lightning = savedLightning; savedLightning = null; }
     }
+    // Celestial overrides (always apply)
+    if (savedCelestial === null) savedCelestial = configMemoObj.celestial || 'sun';
+    if (cfg.celestial !== 'auto') configMemoObj.celestial = cfg.celestial;
+    else configMemoObj.celestial = savedCelestial;
+    configMemoObj.isClearSky = true; // force celestial visibility regardless of weather
+    configMemoObj.sunRays = cfg.sunRays;
+    // Suppress engine native tint when extension tint is active (prevent double tint)
+    if (cfg.tint && cfg.tintStrength > 0) configMemoObj.tint = '';
   }
 
   // ============================================================
@@ -309,6 +320,12 @@
         // subject to the host's own rAF loop, which respawns off-screen/expired
         // particles via its top-40%-biased star factory on every canvas resize
         // (frequent on mobile). Owning the field ourselves keeps it uniform.
+        if (particles && particles.length) particles.length = 0;
+        return;
+      }
+      if (w.type === 'aurora' && cfg.auroraRevamped) {
+        // Revamped aurora is drawn by drawAurora() — clear native particles to
+        // prevent double rendering with the engine's own aurora particles.
         if (particles && particles.length) particles.length = 0;
         return;
       }
@@ -721,7 +738,7 @@
     if (currentChatId) saveChatState(currentChatId);
     removeTint();
     particlesRefObj = null; configMemoObj = null;
-    savedOverlay = null; savedLightning = null; savedParticles = null;
+    savedOverlay = null; savedLightning = null; savedParticles = null; savedCelestial = null;
     canvas = null; baseCount = 0; fiberRetryCount = 0; currentChatId = null;
     lightningAlpha = 0; nextLightningFrame = 0; lightningFrameCount = 0;
     auroraBands = null; auroraFrameCount = 0; shootingStars = []; starFrameCount = 0; starField = null;
@@ -990,6 +1007,22 @@
         '<input class="mt-rng" id="mt-tint-str" type="range" min="0" max="0.5" step="0.01" value="' + cfg.tintStrength + '">' +
         '<span class="mt-val" id="mt-tint-str-val">' + cfg.tintStrength.toFixed(2) + '</span>' +
       '</div>' +
+      '<div id="mt-celestial-section" class="mt-divider">' +
+        '<div class="mt-aurora-hdr"><span>Celestial</span></div>' +
+        '<div class="mt-row">' +
+          '<span class="mt-lbl">Show</span>' +
+          '<select id="mt-celestial" class="mt-sel">' +
+            '<option value="auto"' + (cfg.celestial === 'auto' ? ' selected' : '') + '>Auto</option>' +
+            '<option value="sun"' + (cfg.celestial === 'sun' ? ' selected' : '') + '>Sun</option>' +
+            '<option value="moon"' + (cfg.celestial === 'moon' ? ' selected' : '') + '>Moon</option>' +
+            '<option value="none"' + (cfg.celestial === 'none' ? ' selected' : '') + '>None</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="mt-row">' +
+          '<span class="mt-lbl">Sun Rays</span>' +
+          '<input type="checkbox" id="mt-sun-rays"' + (cfg.sunRays ? ' checked' : '') + ' style="accent-color:var(--primary);cursor:pointer">' +
+        '</div>' +
+      '</div>' +
       '<button class="mt-rst" id="mt-rst">Reset defaults</button>' +
       '<div id="mt-aurora-section" class="mt-divider">' +
         '<div class="mt-aurora-hdr">' +
@@ -1106,6 +1139,23 @@
         applyNow();
       });
     }
+
+    var celestial = document.getElementById('mt-celestial');
+    if (celestial) {
+      celestial.addEventListener('change', function () {
+        cfg.celestial = celestial.value;
+        saveCfg(cfg);
+        applyNow();
+      });
+    }
+    var sunRays = document.getElementById('mt-sun-rays');
+    if (sunRays) {
+      sunRays.addEventListener('change', function () {
+        cfg.sunRays = sunRays.checked;
+        saveCfg(cfg);
+        applyNow();
+      });
+    }
   }
 
   function updateAuroraDisabled() {
@@ -1143,6 +1193,10 @@
     if (ac2) ac2.value = cfg.auroraColor2 || '#cc66ff';
     var rev = document.getElementById('mt-aurora-revamped');
     if (rev) rev.checked = cfg.auroraRevamped !== false;
+    var cel = document.getElementById('mt-celestial');
+    if (cel) cel.value = cfg.celestial || 'auto';
+    var sr = document.getElementById('mt-sun-rays');
+    if (sr) sr.checked = cfg.sunRays !== false;
     updateAuroraDisabled();
     updateBtnState();
   }
