@@ -232,7 +232,7 @@
   function findActiveChatId() {
     try {
       var el = document.querySelector(
-        'aside [data-chat-id].bg-\\[var\\(--sidebar-accent\\)\\]'
+        '[data-chat-id].bg-\\[var\\(--marinara-chat-chrome-highlight-bg\\)\\]'
       );
       return el ? el.getAttribute('data-chat-id') : null;
     } catch (e) {}
@@ -750,15 +750,15 @@
   var SVG_NS = 'http://www.w3.org/2000/svg';
 
   function weatherBtnClass(active) {
-    var base = 'flex items-center justify-center rounded-full border backdrop-blur-md transition-all p-1.5 ';
+    var base = 'marinara-chat-toolbar-button flex items-center justify-center rounded-lg border border-[var(--marinara-chat-chrome-button-border)] bg-[var(--marinara-chat-chrome-button-bg)] text-[var(--marinara-chat-chrome-button-text)] backdrop-blur-md transition-all hover:border-[var(--marinara-chat-chrome-button-border-hover)] hover:bg-[var(--marinara-chat-chrome-button-bg-hover)] hover:text-[var(--marinara-chat-chrome-button-text-hover)] h-8 w-8 p-1.5';
     return active
-      ? base + 'bg-foreground/15 border-foreground/20 text-foreground/90'
-      : base + 'border-foreground/10 bg-foreground/5 text-foreground/60 hover:bg-foreground/10 hover:text-foreground';
+      ? base + ' marinara-chat-toolbar-button--active border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-button-bg-active)] text-[var(--marinara-chat-chrome-button-text-active)]'
+      : base;
   }
 
   function buildWeatherIcon() {
     var svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('width', '14'); svg.setAttribute('height', '14');
+    svg.setAttribute('width', '15'); svg.setAttribute('height', '15');
     svg.setAttribute('viewBox', '0 0 24 24');
     svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor');
     svg.setAttribute('stroke-width', '2'); svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('stroke-linejoin', 'round');
@@ -788,10 +788,12 @@
   }
 
   function addToolbarButtons() {
-    // Desktop / inline toolbar group
-    var groups = document.querySelectorAll('div.pointer-events-auto.ml-auto.flex.shrink-0');
+    // Desktop / inline toolbar group — skip on mobile, handled by injectMobileMenuButton
+    var isMobile = window.innerWidth < 768;
+    var groups = document.querySelectorAll('[data-roleplay-top-controls="right"]');
     for (var i = 0; i < groups.length; i++) {
       var group = groups[i];
+      if (isMobile) continue;
       // Check it has the right children pattern (gap-1.5 class)
       if (group.className.indexOf('gap') === -1) continue;
       if (group.querySelector('#mt-btn-wrapper')) continue; // already injected
@@ -815,12 +817,9 @@
   // with the classes below. The extension button isn't a React child of that
   // menu, so we inject a copy whenever the popover appears.
   function injectMobileMenuButton() {
-    // The plain conversation view has an identical-looking overflow menu but no
-    // weather effects. Our desktop button (#mt-btn-wrapper) is only ever injected
-    // on the roleplay surface \u2014 and stays in the DOM, just CSS-hidden, on mobile \u2014
-    // so its presence is a reliable "this chat is a roleplay" gate.
-    if (!document.getElementById('mt-btn-wrapper')) return;
-    var popovers = document.querySelectorAll('div.fixed.w-9.flex-col.items-center');
+    // Only inject in roleplay chats
+    if (!document.querySelector('[data-chat-mode="roleplay"]')) return;
+    var popovers = document.querySelectorAll('[data-chat-toolbar-overflow-menu]');
     for (var i = 0; i < popovers.length; i++) {
       var pop = popovers[i];
       if (pop.querySelector('#mt-popover-btn')) continue; // already injected
@@ -856,28 +855,21 @@
     }
 
     var card = document.createElement('div');
-    if (isMobile) {
-      card.className =
-        'relative w-full max-w-sm max-h-[calc(100dvh-4rem)] overflow-y-auto';
-    }
-    card.style.cssText =
-      'border-radius:12px;border:1px solid var(--border);' +
-      'background:var(--card);box-shadow:0 25px 50px -12px rgba(0,0,0,.6);' +
-      'animation:message-in .2s ease-out;' +
-      (isMobile ? '' : 'position:absolute;right:0;top:calc(100% + 4px);z-index:100;' +
-        'width:262px;max-height:calc(100dvh - 200px);overflow-y:auto;');
+    card.className =
+      'marinara-chat-popover rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] text-[var(--marinara-chat-chrome-panel-text)] shadow-2xl shadow-black/40 backdrop-blur-md animate-message-in ' +
+      (isMobile
+        ? 'relative w-full max-w-sm max-h-[calc(100dvh-4rem)] overflow-y-auto'
+        : 'absolute right-0 top-[calc(100%+4px)] z-[100] w-[262px] max-h-[calc(100dvh-200px)] overflow-y-auto');
 
     // Header
     var header = document.createElement('div');
-    header.style.cssText =
-      'display:flex;align-items:center;justify-content:space-between;' +
-      'padding:8px 12px;border-bottom:1px solid var(--border);';
+    header.className = 'border-b border-[var(--marinara-chat-chrome-panel-divider)] px-3 py-2.5 flex items-center justify-between';
 
     var title = document.createElement('div');
-    title.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--foreground);';
+    title.className = 'flex min-w-0 items-center gap-1.5 text-xs font-semibold leading-tight text-[var(--marinara-chat-chrome-panel-title)]';
     title.innerHTML =
-      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
-      'stroke-linecap="round" stroke-linejoin="round" style="color:var(--primary,#6c63ff);flex-shrink:0">' +
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+      'stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">' +
       '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>' +
       '<path d="M12 2v1M4.93 4.93l.7.7M2 12h1M20 12h1"/>' +
       '</svg>Weather Tweaks';
@@ -885,21 +877,12 @@
 
     var close = document.createElement('button');
     close.id = 'mt-close-' + uid;
-    close.style.cssText =
-      'border-radius:6px;padding:4px;color:var(--muted-foreground);' +
-      'background:none;border:none;cursor:pointer;line-height:0;' +
-      'transition:background .15s,color .15s;';
+    close.className = 'rounded-lg p-1.5 text-[var(--muted-foreground)] transition-all hover:bg-[var(--accent)] hover:text-[var(--foreground)]';
     close.innerHTML =
-      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
       'stroke-linecap="round" stroke-linejoin="round">' +
       '<path d="M18 6 6 18M6 6l12 12"/>' +
       '</svg>';
-    close.addEventListener('mouseenter', function () {
-      this.style.background = 'var(--accent)'; this.style.color = 'var(--foreground)';
-    });
-    close.addEventListener('mouseleave', function () {
-      this.style.background = 'none'; this.style.color = 'var(--muted-foreground)';
-    });
     close.addEventListener('click', closePopup);
     header.appendChild(close);
 
@@ -907,7 +890,7 @@
 
     // Body
     var body = document.createElement('div');
-    body.style.cssText = 'padding:4px 12px 2px;';
+    body.className = 'px-3 py-1';
     body.innerHTML = buildContent();
     card.appendChild(body);
 
@@ -953,10 +936,10 @@
     // Check if weather canvas exists — if not, show help message
     if (!document.querySelector('canvas.pointer-events-none.absolute.inset-0.z-0')) {
       return (
-        '<div style="padding:12px 0;text-align:center;font-size:12px;color:var(--muted-foreground,#999);line-height:1.6">' +
+        '<div style="padding:12px 0;text-align:center;line-height:1.6;color:var(--marinara-chat-chrome-panel-muted);font-size:0.75rem">' +
         '<div style="font-size:28px;margin-bottom:8px;opacity:.6">\u2601\uFE0F</div>' +
         'Weather effects not available for this chat.' +
-        '<div style="margin-top:8px;font-size:11px;text-align:left;color:var(--muted-foreground,#999)">' +
+        '<div style="margin-top:8px;text-align:left;color:var(--marinara-chat-chrome-panel-muted);font-size:0.6875rem">' +
         'Requires:<br>' +
         '\u2022 <strong>Settings \u2192 Appearance</strong> \u2192 enable <em>Dynamic weather effects</em><br>' +
         '\u2022 <strong>Roleplay HUD</strong> \u2192 enable the <em>World State</em> agent' +
@@ -994,28 +977,28 @@
       }
     }
     rows +=
-      '<div class="mt-row" style="border-top:1px solid var(--border);padding-top:5px;margin-top:3px">' +
+      '<div class="mt-row mt-divider">' +
         '<span class="mt-lbl">Weather</span>' +
         '<select id="mt-weather" class="mt-sel">' + weatherOpts + '</select>' +
       '</div>';
 
     var tintHex = cfg.tint || '#ff9933';
     rows +=
-      '<div class="mt-row" style="border-top:1px solid var(--border);padding-top:5px;margin-top:3px">' +
+      '<div class="mt-row mt-divider">' +
         '<span class="mt-lbl">Tint</span>' +
         '<input class="mt-clr" id="mt-tint-clr" type="color" value="' + tintHex + '">' +
         '<input class="mt-rng" id="mt-tint-str" type="range" min="0" max="0.5" step="0.01" value="' + cfg.tintStrength + '">' +
         '<span class="mt-val" id="mt-tint-str-val">' + cfg.tintStrength.toFixed(2) + '</span>' +
       '</div>' +
       '<button class="mt-rst" id="mt-rst">Reset defaults</button>' +
-      '<div id="mt-aurora-section" style="border-top:1px solid var(--border);margin-top:3px">' +
-        '<div style="display:flex;align-items:center;gap:6px;padding:5px 0 2px">' +
-          '<span style="font-size:11px;font-weight:600;color:var(--muted-foreground,#999)">Aurora</span>' +
+      '<div id="mt-aurora-section" class="mt-divider">' +
+        '<div class="mt-aurora-hdr">' +
+          '<span>Aurora</span>' +
         '</div>' +
         '<div class="mt-row">' +
           '<span class="mt-lbl">Revamped</span>' +
-          '<input type="checkbox" id="mt-aurora-revamped"' + (cfg.auroraRevamped ? ' checked' : '') + ' style="accent-color:var(--primary,#6c63ff);cursor:pointer">' +
-          '<span title="Render custom aurora bands instead of the default particles" style="cursor:help;font-size:10px;color:var(--muted-foreground,#999);display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid var(--border,#555);flex-shrink:0">?</span>' +
+          '<input type="checkbox" id="mt-aurora-revamped"' + (cfg.auroraRevamped ? ' checked' : '') + ' style="accent-color:var(--primary);cursor:pointer">' +
+          '<span class="mt-help" title="Render custom aurora bands instead of the default particles">?</span>' +
         '</div>' +
         '<div class="mt-row">' +
           '<span class="mt-lbl">Style</span>' +
@@ -1024,14 +1007,14 @@
             '<option value="realistic"' + (cfg.auroraStyle === 'realistic' ? ' selected' : '') + '>Realistic</option>' +
             '<option value="custom"' + (cfg.auroraStyle === 'custom' ? ' selected' : '') + '>Custom</option>' +
           '</select>' +
-          '<span title="Style presets only apply when Revamped is enabled" style="cursor:help;font-size:10px;color:var(--muted-foreground,#999);display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid var(--border,#555);flex-shrink:0">?</span>' +
+          '<span class="mt-help" title="Style presets only apply when Revamped is enabled">?</span>' +
         '</div>' +
         '<div class="mt-row" id="mt-aurora-custom-row">' +
           '<input class="mt-clr" id="mt-aurora-c1" type="color" value="' + (cfg.auroraColor1 || '#80ff80') + '"' + (cfg.auroraStyle === 'custom' && cfg.auroraRevamped ? '' : ' disabled') + '>' +
-          '<span style="font-size:10px;color:var(--muted-foreground,#999)">base</span>' +
+          '<span style="font-size:0.625rem;color:var(--marinara-chat-chrome-panel-muted)">base</span>' +
           '<input class="mt-clr" id="mt-aurora-c2" type="color" value="' + (cfg.auroraColor2 || '#cc66ff') + '"' + (cfg.auroraStyle === 'custom' && cfg.auroraRevamped ? '' : ' disabled') + '>' +
-          '<span style="font-size:10px;color:var(--muted-foreground,#999)">accent</span>' +
-          '<span title="Custom colors only apply when the Custom style is selected" style="cursor:help;font-size:10px;color:var(--muted-foreground,#999);display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid var(--border,#555);flex-shrink:0">?</span>' +
+          '<span style="font-size:0.625rem;color:var(--marinara-chat-chrome-panel-muted)">accent</span>' +
+          '<span class="mt-help" title="Custom colors only apply when the Custom style is selected">?</span>' +
         '</div>' +
       '</div>';
 
@@ -1168,7 +1151,8 @@
     var btns = document.querySelectorAll('#mt-btn-wrapper > button, #mt-popover-btn');
     var active = isActive() || (popup !== null);
     for (var i = 0; i < btns.length; i++) {
-      btns[i].className = weatherBtnClass(active);
+      var btn = btns[i];
+      btn.className = weatherBtnClass(active);
     }
   }
 
@@ -1210,7 +1194,7 @@
   // CLEANUP
   // ============================================================
 
-  if (typeof marinara !== 'undefined' && marinara.onCleanup) {
+  if (marinara && marinara.onCleanup) {
     marinara.onCleanup(function () {
       closePopup();
       detach();

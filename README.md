@@ -79,7 +79,7 @@ The original particles are snapshotted before any forced override, so switching 
 
 ## Requirements
 
-- Marinara Engine ≥ v1.5.0 (with extension CSS/JS support)
+- Marinara Engine ≥ v2.0.0 (with extension CSS/JS support)
 - **Dynamic weather effects** enabled: **Settings → Appearance → Dynamic weather effects**
 - **World State** agent active in the chat's Roleplay HUD
 
