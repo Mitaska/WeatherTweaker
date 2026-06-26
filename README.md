@@ -10,9 +10,10 @@ A Marinara Engine extension that adds a popup in the chat toolbar to **tweak wea
 - **Toolbar popup** — click the cloud icon in the roleplay chat header
 - **7 sliders** for opacity, speed, size, count, brightness, contrast, tint
 - **17 weather presets** — force any weather type (rain, snow, thunderstorm, aurora, etc.)
-- **Real-time** — changes take effect immediately via React fiber particle injection
+- **Standalone mode** — render weather on the extension's own canvas, with **no World State agent and no "Dynamic weather effects" setting required** (see below)
+- **Real-time** — changes take effect immediately (via React fiber particle injection in greffé mode, or a self-owned render loop in standalone)
 - **Per-chat persistence** — each RP chat stores its own settings (opacity, speed, presets, tint) in localStorage, restored when you switch back
-- **Clean integration** — uses the same popup style as Summary, Author's Notes, Active World Info
+- **Native look** — reuses the engine's chrome tokens (borders, blur, focus ring) so the button and panel match the surrounding toolbar
 - **Revamped Aurora** — toggleable custom band-based aurora rendering with `screen` blend mode, diagonal gradients, and 3 style modes
 - **Custom starfield & meteors** — twinkling, resize-aware stars (Starry Night) plus falling meteors with glowing trails (Starry Showers)
 
@@ -36,11 +37,26 @@ Open Marinara Engine, go to **Settings → Extensions**, click **Import** and se
 | **Contrast** | CSS contrast filter on canvas | 0 – 3 |
 | **Tint** | Color overlay (mix-blend-mode) | 0 – 0.5 |
 | **Weather** | Force a preset or return to Auto | — |
+| **Celestial** | Force Sun / Moon / None (or Auto) | — |
+| **Celestial Position** | Move the sun/moon along its sky arc (rising → peak → setting) | 0 – 1 |
+| **Sun Rays** | Toggle animated sun rays | On / Off |
 | **Aurora Revamped** |	Toggle custom aurora bands | On / Off |
 | **Aurora Style** | Color mode for bands |	Green, Realistic, Custom |
 | **Aurora Colors** |	Base + accent pickers (Custom mode) |	any hex |
 
-The button glows when settings deviate from defaults or a preset is active.
+The button glows when settings deviate from defaults, a preset is active, or standalone mode is on.
+
+### Standalone mode
+
+By default WeatherTweaker *piggybacks* on the engine's weather canvas, which only exists when **Dynamic weather effects** is on **and** the **World State** agent has produced weather/time data. Without that data the engine renders no canvas, so there is nothing to tweak.
+
+**Standalone mode** removes that dependency: the extension mounts and animates **its own canvas** in the roleplay surface, so weather works with no agent and no appearance setting. Toggle it from the **Standalone** switch at the top of the popup (it's also offered on the "not available" screen).
+
+Notes:
+- Standalone is a **global** preference (not per-chat) — it changes the rendering backend, not your per-chat settings.
+- While standalone is active, the engine's own weather canvas is hidden to avoid double rendering.
+- **Auto** has no AI weather to follow in standalone, so it's shown as **None (off)** — pick an explicit preset to see anything.
+- **Celestial** follows your explicit Sun/Moon choice (Auto = off in standalone, since there's no in-story hour to track). Use the **Position** slider to place the sun/moon along its arc.
 
 ### Weather presets
 
@@ -48,7 +64,12 @@ Auto, Clear, Cloudy, Rain, Heavy Rain, Thunderstorm, Snow, Blizzard, Fog, Sandst
 
 ## How it works
 
-**Particle manipulation** — WeatherTweaker traverses the React fiber tree from the weather `<canvas>` to access `particlesRef` inside the `WeatherEffects` component. On each animation frame (`requestAnimationFrame`), the extension loop can:
+WeatherTweaker runs in one of two rendering modes:
+
+- **Greffé (default)** — it hooks into the engine's existing weather canvas (below).
+- **Standalone** — it renders weather on its own canvas, porting the engine's particle/celestial draw routines so the look matches. No fiber traversal, no agent. This also sidesteps the greffé-mode fragility (a stale config reference, host-only celestial gating).
+
+**Particle manipulation (greffé)** — WeatherTweaker traverses the React fiber tree from the weather `<canvas>` to access `particlesRef` inside the `WeatherEffects` component. On each animation frame (`requestAnimationFrame`), the extension loop can:
 
 - Replace particles with preset-generated ones (forced weather)
 - Adjust particle properties (opacity, velocity, scale)
@@ -80,10 +101,14 @@ The original particles are snapshotted before any forced override, so switching 
 ## Requirements
 
 - Marinara Engine ≥ v2.0.0 (with extension CSS/JS support)
+
+**Greffé mode (default)** additionally needs:
 - **Dynamic weather effects** enabled: **Settings → Appearance → Dynamic weather effects**
 - **World State** agent active in the chat's Roleplay HUD
 
-If either setting is missing, the popup shows a help message with setup instructions.
+If either is missing, the popup shows a help message with setup instructions — and a one-click **Standalone** toggle.
+
+**Standalone mode** needs neither: it only requires being in a roleplay chat.
 
 ## Uninstall
 
